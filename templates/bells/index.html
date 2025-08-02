@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load custom_filters %}
 
 {% block content %}
 <head>
@@ -18,11 +19,13 @@
                         {{ day_name }}
                     </button>
                     <small class="text-muted">
-                        {% if day_stats.day_key.count > 0 %}
-                            {{ day_stats.day_key.count }} звонков ({{ day_stats.day_key.first }} - {{ day_stats.day_key.last }})
-                        {% else %}
-                            Нет звонков
-                        {% endif %}
+                        {% with day_stat=day_stats|get_item:day_key %}
+                            {% if day_stat.count > 0 %}
+                                {{ day_stat.count }} звонков ({{ day_stat.first }} - {{ day_stat.last }})
+                            {% else %}
+                                Нет звонков
+                            {% endif %}
+                        {% endwith %}
                     </small>
                 </li>
                 {% endfor %}
@@ -76,8 +79,8 @@
                         </tbody>
                     </table>
                     <div class="d-flex justify-content-end">
+                        <a href="/bells/export/" class="btn btn-success me-2" id="export-btn">Экспорт в Excel</a>
                         <button class="btn btn-primary me-2" id="save-btn">Сохранить</button>
-                        <button class="btn btn-warning d-none" id="edit-btn">Редактировать</button>
                     </div>
                 </div>
             </div>
@@ -146,7 +149,7 @@
 </div>
 
 <script>
-    // Пример JS для переключения дней
+    // переключения дней
     document.querySelectorAll('.day-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const day = this.dataset.day;
@@ -377,6 +380,14 @@
         font-weight: bold;
         background-color: #0d6efd;
         color: white;
+    }
+    #export-btn {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
+    #export-btn:hover {
+        background-color: #218838;
+        border-color: #1e7e34;
     }
 </style>
 {% endblock %}
