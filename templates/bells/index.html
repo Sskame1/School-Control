@@ -1,27 +1,37 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block content %}
+<head>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+</head>
 <div class="container-fluid">
     <div class="row">
         <!-- Левая панель - Дни недели -->
         <div class="col-md-2 bg-light p-3">
             <h4>Дни недели</h4>
-            <ul class="nav flex-column">
+                <ul class="nav flex-column">
+                {% for day_key, day_name in days.items %}
                 <li class="nav-item mb-2">
-                    <button class="btn btn-outline-primary w-100 day-btn active" data-day="monday">Понедельник</button>
-                    <small class="text-muted">5 уроков (08:30-13:00)</small>
+                    <button class="btn btn-outline-primary w-100 day-btn {% if day_key == active_day %}active{% endif %}" 
+                            data-day="{{ day_key }}">
+                        {{ day_name }}
+                    </button>
+                    <small class="text-muted">
+                        {% if day_stats.day_key.count > 0 %}
+                            {{ day_stats.day_key.count }} звонков ({{ day_stats.day_key.first }} - {{ day_stats.day_key.last }})
+                        {% else %}
+                            Нет звонков
+                        {% endif %}
+                    </small>
                 </li>
-                <li class="nav-item mb-2">
-                    <button class="btn btn-outline-primary w-100 day-btn" data-day="tuesday">Вторник</button>
-                    <small class="text-muted">6 уроков (08:30-14:00)</small>
-                </li>
-                <!-- Остальные дни (среда, четверг, пятница, суббота) -->
+                {% endfor %}
             </ul>
         </div>
 
         <!-- Центральная панель - Расписание звонков -->
         <div class="col-md-8 p-3">
-            <h1>Расписание звонков - <span id="current-day">Понедельник</span></h1>
+            <h1>Расписание звонков - <span id="current-day">{{ current_day_name  }}</span></h1>
             
             <div class="card mt-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -41,26 +51,28 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- Пример строки (будет генерироваться динамически) -->
-                            <tr>
-                                <td>1</td>
-                                <td><input type="time" class="form-control" value="08:30"></td>
-                                <td><input type="time" class="form-control" value="08:45"></td>
+                            {% for bell in schedule %}
+                            <tr data-bell-id="{{ bell.id }}">
+                                <td>{{ forloop.counter }}</td>
+                                <td><input type="time" class="form-control" value="{{ bell.start_time|time:'H:i' }}"></td>
+                                <td><input type="time" class="form-control" value="{{ bell.end_time|time:'H:i' }}"></td>
                                 <td>
                                     <select class="form-select">
-                                        <option>Звонок 1</option>
-                                        <option>Звонок 2</option>
+                                        {% for melody in melodies %}
+                                        <option {% if melody == bell.melody %}selected{% endif %}>{{ melody }}</option>
+                                        {% endfor %}
                                     </select>
                                 </td>
                                 <td>
                                     <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" checked>
+                                        <input class="form-check-input" type="checkbox" {% if bell.is_active %}checked{% endif %}>
                                     </div>
                                 </td>
                                 <td>
-                                    <button class="btn btn-danger btn-sm">×</button>
+                                    <button class="btn btn-danger btn-sm delete-btn">×</button>
                                 </td>
                             </tr>
+                            {% endfor %}
                         </tbody>
                     </table>
                     <div class="d-flex justify-content-end">
@@ -137,55 +149,226 @@
     // Пример JS для переключения дней
     document.querySelectorAll('.day-btn').forEach(btn => {
         btn.addEventListener('click', function() {
-            document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            document.getElementById('current-day').textContent = this.textContent.trim();
-            // Здесь будет AJAX-запрос для загрузки расписания
+            const day = this.dataset.day;
+            const dayName = this.textContent.trim();
+            
+            // Обновляем URL без перезагрузки страницы
+            history.pushState(null, null, `?day=${day}`);
+            
+            fetch(`/bells/get_schedule/?day=${day}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Обновляем таблицу
+                    const tbody = document.querySelector('#bell-schedule tbody');
+                    tbody.innerHTML = '';
+                    
+                    data.schedule.forEach((bell, index) => {
+                        const row = document.createElement('tr');
+                        row.dataset.bellId = bell.id;
+                        row.innerHTML = `
+                            <td>${index + 1}</td>
+                            <td><input type="time" class="form-control" value="${bell.start_time}"></td>
+                            <td><input type="time" class="form-control" value="${bell.end_time}"></td>
+                            <td>
+                                <select class="form-select">
+                                    {% for melody in melodies %}
+                                    <option ${bell.melody === '{{ melody }}' ? 'selected' : ''}>{{ melody }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" ${bell.is_active ? 'checked' : ''}>
+                                </div>
+                            </td>
+                            <td>
+                                <button class="btn btn-danger btn-sm delete-btn">×</button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                    
+                    // Обновляем активный день
+                    document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    document.getElementById('current-day').textContent = dayName;
+                });
         });
     });
 
     // Кнопка добавления звонка
     document.getElementById('add-bell').addEventListener('click', function() {
-        const table = document.getElementById('bell-schedule').getElementsByTagName('tbody')[0];
-        const newRow = table.insertRow();
-        newRow.innerHTML = `
-            <td>${table.rows.length + 1}</td>
-            <td><input type="time" class="form-control" value="09:00"></td>
-            <td><input type="time" class="form-control" value="09:45"></td>
-            <td>
-                <select class="form-select">
-                    <option>Звонок 1</option>
-                    <option>Звонок 2</option>
-                </select>
-            </td>
-            <td>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" checked>
-                </div>
-            </td>
-            <td>
-                <button class="btn btn-danger btn-sm">×</button>
-            </td>
+    const table = document.getElementById('bell-schedule').getElementsByTagName('tbody')[0];
+    const newRow = table.insertRow();
+    newRow.innerHTML = `
+        <td>${table.rows.length + 1}</td>
+        <td><input type="time" class="form-control" value="09:00"></td>
+        <td><input type="time" class="form-control" value="09:45"></td>
+        <td>
+            <select class="form-select">
+                {% for melody in melodies %}
+                <option>{{ melody }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" checked>
+            </div>
+        </td>
+        <td>
+            <button class="btn btn-danger btn-sm delete-btn">×</button>
+        </td>
         `;
     });
 
-    // Переключение кнопок Сохранить/Редактировать
+    /// Сохранение расписания
     document.getElementById('save-btn').addEventListener('click', function() {
-        this.classList.add('d-none');
-        document.getElementById('edit-btn').classList.remove('d-none');
-        // Блокируем редактирование
-        document.querySelectorAll('#bell-schedule input, #bell-schedule select').forEach(el => {
-            el.disabled = true;
+        const activeDay = document.querySelector('.day-btn.active').dataset.day;
+        const bells = [];
+        
+        document.querySelectorAll('#bell-schedule tbody tr').forEach(row => {
+            bells.push([
+                row.querySelector('input[type="time"]').value,
+                row.querySelectorAll('input[type="time"]')[1].value,
+                row.querySelector('select').value,
+                row.querySelector('.form-check-input').checked
+            ].join('|'));
+        });
+        
+        const formData = new FormData();
+        formData.append('day', activeDay);
+        bells.forEach((bell, index) => {
+            formData.append('bells[]', bell);
+        });
+        
+        fetch('/bells/save/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+            body: formData
+        }).then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                new Audio('/static/sounds/confirm_sound.mp3').play();
+                // Вместо location.reload() используем redirect с параметром дня
+                window.location.href = data.redirect_url;
+            }
         });
     });
 
-    document.getElementById('edit-btn').addEventListener('click', function() {
-        this.classList.add('d-none');
-        document.getElementById('save-btn').classList.remove('d-none');
-        // Разблокируем редактирование
-        document.querySelectorAll('#bell-schedule input, #bell-schedule select').forEach(el => {
-            el.disabled = false;
+    // Удаление звонка
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('delete-btn')) {
+            const row = e.target.closest('tr');
+            const bellId = row.dataset.bellId;
+            
+            if (bellId) {
+                // Удаление из базы данных
+                fetch(`/bells/delete/${bellId}/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                    }
+                }).then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        row.remove();
+                        updateRowNumbers();
+                    }
+                });
+            } else {
+                // Удаление новой строки (еще не сохраненной в БД)
+                row.remove();
+                updateRowNumbers();
+            }
+        }
+    });
+
+    function updateRowNumbers() {
+        document.querySelectorAll('#bell-schedule tbody tr').forEach((row, index) => {
+            row.cells[0].textContent = index + 1;
         });
+    }
+
+    // Для ЧС
+    document.querySelector('#emergencyModal .btn-danger').addEventListener('click', () => {
+        new Audio('/static/sounds/confirm_sound.mp3').play();
+    });
+
+    // Для объявлений
+    document.querySelector('#announcementModal .btn-info').addEventListener('click', () => {
+        new Audio('/static/sounds/confirm_sound.mp3').play();
+    });
+
+    // Переключение дней недели
+    document.querySelectorAll('.day-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const day = this.dataset.day;
+            const dayName = this.textContent.trim();
+            
+            fetch(`/bells/get_schedule/?day=${day}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Обновляем таблицу
+                    const tbody = document.querySelector('#bell-schedule tbody');
+                    tbody.innerHTML = '';
+                    
+                    data.schedule.forEach((bell, index) => {
+                        const row = document.createElement('tr');
+                        row.dataset.bellId = bell.id;
+                        row.innerHTML = `
+                            <td>${index + 1}</td>
+                            <td><input type="time" class="form-control" value="${bell.start_time}"></td>
+                            <td><input type="time" class="form-control" value="${bell.end_time}"></td>
+                            <td>
+                                <select class="form-select">
+                                    {% for melody in melodies %}
+                                    <option ${bell.melody === '{{ melody }}' ? 'selected' : ''}>{{ melody }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" ${bell.is_active ? 'checked' : ''}>
+                                </div>
+                            </td>
+                            <td>
+                                <button class="btn btn-danger btn-sm delete-btn">×</button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                    
+                    // Обновляем активный день
+                    document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    document.getElementById('current-day').textContent = dayName;
+                    document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+                        this.classList.add('active');
+                });
+        });
+    });
+
+    // При загрузке страницы активируем сохраненный день
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const dayParam = urlParams.get('day');
+        
+        if (dayParam) {
+            const dayBtn = document.querySelector(`.day-btn[data-day="${dayParam}"]`);
+            if (dayBtn) {
+                dayBtn.classList.add('active');
+                document.getElementById('current-day').textContent = dayBtn.textContent.trim();
+            }
+        } else {
+            // Если параметра нет, активируем понедельник
+            const mondayBtn = document.querySelector('.day-btn[data-day="monday"]');
+            if (mondayBtn) {
+                mondayBtn.classList.add('active');
+            }
+        }
     });
 </script>
 
