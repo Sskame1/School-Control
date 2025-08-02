@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Левая панель - Дни недели -->
+        <div class="col-md-2 bg-light p-3">
+            <h4>Дни недели</h4>
+            <ul class="nav flex-column">
+                <li class="nav-item mb-2">
+                    <button class="btn btn-outline-primary w-100 day-btn active" data-day="monday">Понедельник</button>
+                    <small class="text-muted">5 уроков (08:30-13:00)</small>
+                </li>
+                <li class="nav-item mb-2">
+                    <button class="btn btn-outline-primary w-100 day-btn" data-day="tuesday">Вторник</button>
+                    <small class="text-muted">6 уроков (08:30-14:00)</small>
+                </li>
+                <!-- Остальные дни (среда, четверг, пятница, суббота) -->
+            </ul>
+        </div>
+
+        <!-- Центральная панель - Расписание звонков -->
+        <div class="col-md-8 p-3">
+            <h1>Расписание звонков - <span id="current-day">Понедельник</span></h1>
+            
+            <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Настройки звонков</span>
+                    <button class="btn btn-success btn-sm" id="add-bell">+ Добавить звонок</button>
+                </div>
+                <div class="card-body">
+                    <table class="table" id="bell-schedule">
+                        <thead>
+                            <tr>
+                                <th>№</th>
+                                <th>Начало</th>
+                                <th>Конец</th>
+                                <th>Мелодия</th>
+                                <th>Вкл/Выкл</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Пример строки (будет генерироваться динамически) -->
+                            <tr>
+                                <td>1</td>
+                                <td><input type="time" class="form-control" value="08:30"></td>
+                                <td><input type="time" class="form-control" value="08:45"></td>
+                                <td>
+                                    <select class="form-select">
+                                        <option>Звонок 1</option>
+                                        <option>Звонок 2</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" checked>
+                                    </div>
+                                </td>
+                                <td>
+                                    <button class="btn btn-danger btn-sm">×</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="d-flex justify-content-end">
+                        <button class="btn btn-primary me-2" id="save-btn">Сохранить</button>
+                        <button class="btn btn-warning d-none" id="edit-btn">Редактировать</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Правая панель - Sound Pad -->
+        <div class="col-md-2 bg-light p-3">
+            <h4>Sound Pad</h4>
+            <div class="d-grid gap-2">
+                <button class="btn btn-danger mb-2" data-bs-toggle="modal" data-bs-target="#emergencyModal">
+                    Чрезвычайные ситуации
+                </button>
+                <button class="btn btn-info mb-2" data-bs-toggle="modal" data-bs-target="#announcementModal">
+                    Звуковые объявления
+                </button>
+                <!-- Дополнительные кнопки -->
+                <button class="btn btn-secondary mb-2">Звонок вручную</button>
+                <button class="btn btn-secondary mb-2">Тихий режим</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальные окна -->
+<!-- Модальное окно для ЧС -->
+<div class="modal fade" id="emergencyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Чрезвычайные ситуации</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <select class="form-select mb-3">
+                    <option>Пожарная тревога</option>
+                    <option>Тревога "Задымление"</option>
+                    <option>Эвакуация</option>
+                </select>
+                <button class="btn btn-danger w-100">Активировать</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для объявлений -->
+<div class="modal fade" id="announcementModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">Звуковые объявления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Текст объявления:</label>
+                    <textarea class="form-control" rows="3"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Или загрузите MP3:</label>
+                    <input type="file" class="form-control" accept=".mp3">
+                </div>
+                <button class="btn btn-info w-100">Воспроизвести</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Пример JS для переключения дней
+    document.querySelectorAll('.day-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            document.getElementById('current-day').textContent = this.textContent.trim();
+            // Здесь будет AJAX-запрос для загрузки расписания
+        });
+    });
+
+    // Кнопка добавления звонка
+    document.getElementById('add-bell').addEventListener('click', function() {
+        const table = document.getElementById('bell-schedule').getElementsByTagName('tbody')[0];
+        const newRow = table.insertRow();
+        newRow.innerHTML = `
+            <td>${table.rows.length + 1}</td>
+            <td><input type="time" class="form-control" value="09:00"></td>
+            <td><input type="time" class="form-control" value="09:45"></td>
+            <td>
+                <select class="form-select">
+                    <option>Звонок 1</option>
+                    <option>Звонок 2</option>
+                </select>
+            </td>
+            <td>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" checked>
+                </div>
+            </td>
+            <td>
+                <button class="btn btn-danger btn-sm">×</button>
+            </td>
+        `;
+    });
+
+    // Переключение кнопок Сохранить/Редактировать
+    document.getElementById('save-btn').addEventListener('click', function() {
+        this.classList.add('d-none');
+        document.getElementById('edit-btn').classList.remove('d-none');
+        // Блокируем редактирование
+        document.querySelectorAll('#bell-schedule input, #bell-schedule select').forEach(el => {
+            el.disabled = true;
+        });
+    });
+
+    document.getElementById('edit-btn').addEventListener('click', function() {
+        this.classList.add('d-none');
+        document.getElementById('save-btn').classList.remove('d-none');
+        // Разблокируем редактирование
+        document.querySelectorAll('#bell-schedule input, #bell-schedule select').forEach(el => {
+            el.disabled = false;
+        });
+    });
+</script>
+
+<style>
+    .day-btn.active {
+        font-weight: bold;
+        background-color: #0d6efd;
+        color: white;
+    }
+</style>
+{% endblock %}

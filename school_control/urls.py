@@ -16,7 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from bells.views import bells_view
+from facepass.views import facepass_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('bells/', bells_view, name='bells'),
+    path('facepass/', facepass_view, name='facepass')
 ]

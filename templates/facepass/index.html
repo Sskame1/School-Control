@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Система учёта посещений столовой</h1>
+
+<div class="card mt-3">
+    <div class="card-header">
+        Камера
+    </div>
+    <div class="card-body">
+        <div class="text-center">
+            <img src="https://via.placeholder.com/640x360" class="img-fluid" id="camera-feed">
+            <button class="btn btn-primary mt-3">Запустить распознавание</button>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-3">
+    <div class="card-header">
+        Журнал посещений
+    </div>
+    <div class="card-body">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ФИО</th>
+                    <th>Время</th>
+                    <th>Класс</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Иванов А.</td>
+                    <td>12:30</td>
+                    <td>9А</td>
+                </tr>
+            </tbody>
+        </table>
+        <button class="btn btn-success">Экспорт в Excel</button>
+    </div>
+</div>
+{% endblock %}
