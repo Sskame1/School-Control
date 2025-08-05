@@ -79,6 +79,7 @@
                         </tbody>
                     </table>
                     <div class="d-flex justify-content-end">
+                        <button class="btn btn-secondary me-2" id="clone-schedule-btn">Клонировать на дни</button>
                         <a href="/bells/export/" class="btn btn-success me-2" id="export-btn">Экспорт в Excel</a>
                         <button class="btn btn-primary me-2" id="save-btn">Сохранить</button>
                     </div>
@@ -98,7 +99,7 @@
                 </button>
                 <!-- Дополнительные кнопки -->
                 <button class="btn btn-secondary mb-2">Звонок вручную</button>
-                <button class="btn btn-secondary mb-2">Тихий режим</button>
+                <button class="btn btn-secondary mb-2">выключить звонок вручную</button>
             </div>
         </div>
     </div>
@@ -148,20 +149,141 @@
     </div>
 </div>
 
+<!-- Модальное окно для выбора дней -->
+<div class="modal fade" id="cloneModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Клонировать расписание</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Копируем из: <strong id="current-day-to-clone" class="text-primary">Понедельник</strong></p>
+                
+                <div class="mb-3">
+                    <button id="select-weekdays" class="btn btn-sm btn-outline-secondary me-2">Будни</button>
+                    <button id="select-weekend" class="btn btn-sm btn-outline-secondary me-2">Выходные</button>
+                    <button id="select-all" class="btn btn-sm btn-outline-secondary">Все дни</button>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input day-checkbox" type="checkbox" id="clone-monday" value="monday">
+                            <label class="form-check-label" for="clone-monday">Понедельник</label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input day-checkbox" type="checkbox" id="clone-tuesday" value="tuesday">
+                            <label class="form-check-label" for="clone-tuesday">Вторник</label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input day-checkbox" type="checkbox" id="clone-wednesday" value="wednesday">
+                            <label class="form-check-label" for="clone-wednesday">Среда</label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input day-checkbox" type="checkbox" id="clone-thursday" value="thursday">
+                            <label class="form-check-label" for="clone-thursday">Четверг</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input day-checkbox" type="checkbox" id="clone-friday" value="friday">
+                            <label class="form-check-label" for="clone-friday">Пятница</label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input day-checkbox" type="checkbox" id="clone-saturday" value="saturday">
+                            <label class="form-check-label" for="clone-saturday">Суббота</label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input day-checkbox" type="checkbox" id="clone-sunday" value="sunday">
+                            <label class="form-check-label" for="clone-sunday">Воскресенье</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="overwrite-existing">
+                    <label class="form-check-label" for="overwrite-existing">Перезаписать существующие звонки</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="confirm-clone">
+                    <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                    Клонировать
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100; display: none;">
+    <div id="universal-toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong id="toast-title" class="me-auto"></strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div id="toast-message" class="toast-body"></div>
+    </div>
+</div>
+
+<div id="global-backdrop" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-25" style="z-index: 1040; display: none;"></div>
+
+
 <script>
-    // переключения дней
+    // Универсальная функция для показа уведомлений
+    function showToast(title, message, type = 'success') {
+        const toastContainer = document.getElementById('toast-container');
+        const toastEl = document.getElementById('universal-toast');
+        const toastTitle = document.getElementById('toast-title');
+        const toastMessage = document.getElementById('toast-message');
+        
+        // Устанавливаем стили и содержимое
+        toastEl.className = `toast show bg-${type}`;
+        toastTitle.textContent = title;
+        toastMessage.textContent = message;
+        toastContainer.style.display = 'block';
+        
+        // Показываем уведомление
+        const toast = new bootstrap.Toast(toastEl);
+        toast.show();
+        
+        // Автоматическое скрытие через 5 секунд
+        setTimeout(() => {
+            toast.hide();
+            toastContainer.style.display = 'none';
+        }, 5000);
+    }
+
+    // Функция для управления затемнением
+    function showBackdrop(show) {
+        document.getElementById('global-backdrop').style.display = show ? 'block' : 'none';
+    }
+
+    // Функция обновления номеров строк
+    function updateRowNumbers() {
+        document.querySelectorAll('#bell-schedule tbody tr').forEach((row, index) => {
+            row.cells[0].textContent = index + 1;
+        });
+    }
+
+    // Воспроизведение звука с уведомлением
+    function playSoundWithNotification(title, message, type = 'success') {
+        // new Audio('/static/sounds/confirm_sound.mp3').play();
+        showToast(title, message, type);
+    }
+
+    // Переключение дней недели
     document.querySelectorAll('.day-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const day = this.dataset.day;
             const dayName = this.textContent.trim();
             
-            // Обновляем URL без перезагрузки страницы
             history.pushState(null, null, `?day=${day}`);
             
             fetch(`/bells/get_schedule/?day=${day}`)
                 .then(response => response.json())
                 .then(data => {
-                    // Обновляем таблицу
                     const tbody = document.querySelector('#bell-schedule tbody');
                     tbody.innerHTML = '';
                     
@@ -191,41 +313,18 @@
                         tbody.appendChild(row);
                     });
                     
-                    // Обновляем активный день
                     document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
                     this.classList.add('active');
                     document.getElementById('current-day').textContent = dayName;
+                    playSoundWithNotification('Успех', `Загружено расписание для ${dayName}`);
+                })
+                .catch(error => {
+                    showToast('Ошибка', 'Не удалось загрузить расписание', 'danger');
                 });
         });
     });
 
-    // Кнопка добавления звонка
-    document.getElementById('add-bell').addEventListener('click', function() {
-    const table = document.getElementById('bell-schedule').getElementsByTagName('tbody')[0];
-    const newRow = table.insertRow();
-    newRow.innerHTML = `
-        <td>${table.rows.length + 1}</td>
-        <td><input type="time" class="form-control" value="09:00"></td>
-        <td><input type="time" class="form-control" value="09:45"></td>
-        <td>
-            <select class="form-select">
-                {% for melody in melodies %}
-                <option>{{ melody }}</option>
-                {% endfor %}
-            </select>
-        </td>
-        <td>
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" checked>
-            </div>
-        </td>
-        <td>
-            <button class="btn btn-danger btn-sm delete-btn">×</button>
-        </td>
-        `;
-    });
-
-    /// Сохранение расписания
+    // Сохранение расписания
     document.getElementById('save-btn').addEventListener('click', function() {
         const activeDay = document.querySelector('.day-btn.active').dataset.day;
         const bells = [];
@@ -239,6 +338,8 @@
             ].join('|'));
         });
         
+        showBackdrop(true);
+        
         const formData = new FormData();
         formData.append('day', activeDay);
         bells.forEach((bell, index) => {
@@ -251,13 +352,21 @@
                 'X-CSRFToken': '{{ csrf_token }}',
             },
             body: formData
-        }).then(response => response.json())
+        })
+        .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                new Audio('/static/sounds/confirm_sound.mp3').play();
-                // Вместо location.reload() используем redirect с параметром дня
+                playSoundWithNotification('Успех', 'Расписание сохранено');
                 window.location.href = data.redirect_url;
+            } else {
+                throw new Error(data.message || 'Ошибка сохранения');
             }
+        })
+        .catch(error => {
+            showToast('Ошибка', error.message, 'danger');
+        })
+        .finally(() => {
+            showBackdrop(false);
         });
     });
 
@@ -268,111 +377,181 @@
             const bellId = row.dataset.bellId;
             
             if (bellId) {
-                // Удаление из базы данных
+                showBackdrop(true);
                 fetch(`/bells/delete/${bellId}/`, {
                     method: 'POST',
                     headers: {
                         'X-CSRFToken': '{{ csrf_token }}',
                     }
-                }).then(response => response.json())
+                })
+                .then(response => response.json())
                 .then(data => {
                     if (data.status === 'success') {
                         row.remove();
                         updateRowNumbers();
+                        playSoundWithNotification('Успех', 'Звонок удален');
+                    } else {
+                        throw new Error(data.message || 'Ошибка удаления');
                     }
+                })
+                .catch(error => {
+                    showToast('Ошибка', error.message, 'danger');
+                })
+                .finally(() => {
+                    showBackdrop(false);
                 });
             } else {
-                // Удаление новой строки (еще не сохраненной в БД)
                 row.remove();
                 updateRowNumbers();
+                playSoundWithNotification('Успех', 'Звонок удален');
             }
         }
     });
 
-    function updateRowNumbers() {
-        document.querySelectorAll('#bell-schedule tbody tr').forEach((row, index) => {
-            row.cells[0].textContent = index + 1;
+    // Обработчики для Sound Pad
+    document.querySelector('#emergencyModal .btn-danger').addEventListener('click', (e) => {
+        e.preventDefault();
+        const selectedOption = document.querySelector('#emergencyModal select').value;
+        playSoundWithNotification('ЧС активирована', `Активирована тревога: ${selectedOption}`, 'danger');
+    });
+
+    document.querySelector('#announcementModal .btn-info').addEventListener('click', (e) => {
+        e.preventDefault();
+        const announcementText = document.querySelector('#announcementModal textarea').value;
+        playSoundWithNotification('Объявление', 'Звуковое объявление воспроизводится', 'info');
+    });
+
+    // Инициализация модального окна клонирования
+    function initCloneModal() {
+        document.getElementById('clone-schedule-btn').addEventListener('click', function() {
+            const currentDay = document.querySelector('.day-btn.active').dataset.day;
+            const currentDayName = document.querySelector('.day-btn.active').textContent.trim();
+            
+            document.getElementById('current-day-to-clone').textContent = currentDayName;
+            
+            document.querySelectorAll('.day-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+                checkbox.disabled = (checkbox.value === currentDay);
+            });
+            
+            new bootstrap.Modal(document.getElementById('cloneModal')).show();
+        });
+
+        // Кнопки быстрого выбора
+        document.getElementById('select-weekdays').addEventListener('click', function() {
+            document.querySelectorAll('.day-checkbox').forEach(checkbox => {
+                checkbox.checked = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].includes(checkbox.value);
+            });
+        });
+
+        document.getElementById('select-weekend').addEventListener('click', function() {
+            document.querySelectorAll('.day-checkbox').forEach(checkbox => {
+                checkbox.checked = ['saturday', 'sunday'].includes(checkbox.value);
+            });
+        });
+
+        document.getElementById('select-all').addEventListener('click', function() {
+            document.querySelectorAll('.day-checkbox').forEach(checkbox => {
+                if (!checkbox.disabled) checkbox.checked = true;
+            });
+        });
+
+        // Подтверждение клонирования
+        document.getElementById('confirm-clone').addEventListener('click', function() {
+            const btn = this;
+            const spinner = btn.querySelector('.spinner-border');
+            const sourceDay = document.querySelector('.day-btn.active').dataset.day;
+            const overwrite = document.getElementById('overwrite-existing').checked;
+            
+            const targetDays = Array.from(document.querySelectorAll('.day-checkbox:checked:not(:disabled)'))
+                .map(checkbox => checkbox.value);
+            
+            if (targetDays.length === 0) {
+                showToast('Ошибка', 'Выберите дни для клонирования', 'danger');
+                return;
+            }
+
+            btn.disabled = true;
+            spinner.classList.remove('d-none');
+            showBackdrop(true);
+
+            const formData = new FormData();
+            formData.append('source_day', sourceDay);
+            formData.append('overwrite', overwrite);
+            targetDays.forEach(day => formData.append('target_days', day));
+
+            fetch('/bells/clone/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    bootstrap.Modal.getInstance(document.getElementById('cloneModal')).hide();
+                    playSoundWithNotification('Успех', data.message || 'Расписание клонировано');
+                } else {
+                    throw new Error(data.message || 'Ошибка клонирования');
+                }
+            })
+            .catch(error => {
+                showToast('Ошибка', error.message, 'danger');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                showBackdrop(false);
+            });
         });
     }
 
-    // Для ЧС
-    document.querySelector('#emergencyModal .btn-danger').addEventListener('click', () => {
-        new Audio('/static/sounds/confirm_sound.mp3').play();
+    // Кнопка добавления звонка
+    document.getElementById('add-bell').addEventListener('click', function() {
+        showToast("Добавить новый звонок", "Успешно добавлено")
+        const table = document.getElementById('bell-schedule').getElementsByTagName('tbody')[0];
+        const newRow = table.insertRow();
+        newRow.innerHTML = `
+            <td>${table.rows.length + 1}</td>
+            <td><input type="time" class="form-control" value="09:00"></td>
+            <td><input type="time" class="form-control" value="09:45"></td>
+            <td>
+                <select class="form-select">
+                    {% for melody in melodies %}
+                    <option>{{ melody }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" checked>
+                </div>
+            </td>
+            <td>
+                <button class="btn btn-danger btn-sm delete-btn">×</button>
+            </td>
+        `;
     });
 
-    // Для объявлений
-    document.querySelector('#announcementModal .btn-info').addEventListener('click', () => {
-        new Audio('/static/sounds/confirm_sound.mp3').play();
-    });
-
-    // Переключение дней недели
-    document.querySelectorAll('.day-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const day = this.dataset.day;
-            const dayName = this.textContent.trim();
-            
-            fetch(`/bells/get_schedule/?day=${day}`)
-                .then(response => response.json())
-                .then(data => {
-                    // Обновляем таблицу
-                    const tbody = document.querySelector('#bell-schedule tbody');
-                    tbody.innerHTML = '';
-                    
-                    data.schedule.forEach((bell, index) => {
-                        const row = document.createElement('tr');
-                        row.dataset.bellId = bell.id;
-                        row.innerHTML = `
-                            <td>${index + 1}</td>
-                            <td><input type="time" class="form-control" value="${bell.start_time}"></td>
-                            <td><input type="time" class="form-control" value="${bell.end_time}"></td>
-                            <td>
-                                <select class="form-select">
-                                    {% for melody in melodies %}
-                                    <option ${bell.melody === '{{ melody }}' ? 'selected' : ''}>{{ melody }}</option>
-                                    {% endfor %}
-                                </select>
-                            </td>
-                            <td>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" ${bell.is_active ? 'checked' : ''}>
-                                </div>
-                            </td>
-                            <td>
-                                <button class="btn btn-danger btn-sm delete-btn">×</button>
-                            </td>
-                        `;
-                        tbody.appendChild(row);
-                    });
-                    
-                    // Обновляем активный день
-                    document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
-                    this.classList.add('active');
-                    document.getElementById('current-day').textContent = dayName;
-                    document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
-                        this.classList.add('active');
-                });
-        });
-    });
-
-    // При загрузке страницы активируем сохраненный день
+    // Инициализация при загрузке страницы
     document.addEventListener('DOMContentLoaded', function() {
+        // Активация текущего дня
         const urlParams = new URLSearchParams(window.location.search);
         const dayParam = urlParams.get('day');
-        
-        if (dayParam) {
-            const dayBtn = document.querySelector(`.day-btn[data-day="${dayParam}"]`);
-            if (dayBtn) {
-                dayBtn.classList.add('active');
-                document.getElementById('current-day').textContent = dayBtn.textContent.trim();
-            }
-        } else {
-            // Если параметра нет, активируем понедельник
-            const mondayBtn = document.querySelector('.day-btn[data-day="monday"]');
-            if (mondayBtn) {
-                mondayBtn.classList.add('active');
-            }
+        const dayBtn = dayParam 
+            ? document.querySelector(`.day-btn[data-day="${dayParam}"]`)
+            : document.querySelector('.day-btn[data-day="monday"]');
+            
+        if (dayBtn) {
+            dayBtn.classList.add('active');
+            document.getElementById('current-day').textContent = dayBtn.textContent.trim();
         }
+
+        // Инициализация модального окна клонирования
+        initCloneModal();
     });
+    
 </script>
 
 <style>

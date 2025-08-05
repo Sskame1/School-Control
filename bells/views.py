@@ -192,3 +192,52 @@ def export_to_excel(request):
     response['Expires'] = '0'
     
     return response
+
+@csrf_exempt
+def clone_schedule(request):
+    try:
+        source_day = request.POST.get('source_day')
+        target_days = request.POST.getlist('target_days')  # Исправлено получение target_days
+        overwrite = request.POST.get('overwrite', 'false') == 'true'
+        
+        if not source_day or source_day not in dict(BellSchedule.DAYS_OF_WEEK).keys():
+            raise ValueError("Неверный исходный день")
+            
+        source_schedule = BellSchedule.objects.filter(day=source_day).order_by('order')
+        
+        if not source_schedule.exists():
+            return JsonResponse({
+                'status': 'error', 
+                'message': 'В исходном дне нет расписания для клонирования'
+            }, status=400)
+        
+        created_count = 0
+        for day in target_days:
+            if day not in dict(BellSchedule.DAYS_OF_WEEK).keys():
+                continue
+                
+            if overwrite:
+                BellSchedule.objects.filter(day=day).delete()
+            
+            for bell in source_schedule:
+                BellSchedule.objects.create(
+                    id=uuid.uuid4(),
+                    day=day,
+                    start_time=bell.start_time,
+                    end_time=bell.end_time,
+                    melody=bell.melody,
+                    is_active=bell.is_active,
+                    order=bell.order
+                )
+                created_count += 1
+        
+        day_names = ', '.join([dict(BellSchedule.DAYS_OF_WEEK)[day] for day in target_days])
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Расписание успешно клонировано на: {day_names}'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error', 
+            'message': str(e)
+        }, status=400)

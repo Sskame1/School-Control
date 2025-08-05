@@ -37,7 +37,7 @@ docker-compose up -d
 docker-compose down
 ```
 
-# Запуск проекта
+# 3 Запуск проекта
 ## Миграции БД
 ```
 python manage.py makemigrations
