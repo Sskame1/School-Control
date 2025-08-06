@@ -1,42 +1,665 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h1>Система учёта посещений столовой</h1>
+<div class="container-fluid">
+    <div class="row">
+        <!-- Левая панель - база учеников -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5>База учеников</h5>
+                    <input type="text" class="form-control mt-2" placeholder="Поиск по ФИО..." id="student-search">
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Фото</th>
+                                    <th>ФИО</th>
+                                    <th>Класс</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for visitor in all_visitors %}
+                                <tr class="visitor-row" data-visitor-id="{{ visitor.id }}">
+                                    <td><img src="{{ visitor.photo_url }}" class="rounded-circle" width="40" height="40" alt="{{ visitor.user.get_full_name }}"></td>
+                                    <td>{{ visitor.user.get_full_name }}</td>
+                                    <td>{{ visitor.grade }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
-<div class="card mt-3">
-    <div class="card-header">
-        Камера
-    </div>
-    <div class="card-body">
-        <div class="text-center">
-            <img src="https://via.placeholder.com/640x360" class="img-fluid" id="camera-feed">
-            <button class="btn btn-primary mt-3">Запустить распознавание</button>
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5>Статистика посещений</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="visitChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Центральная панель - основная камера и журнал -->
+        <div class="col-md-6">
+            <h3 class="text-center mb-4">Система учёта посещений столовой</h3>
+            
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Основная камера</span>
+                    <select class="form-select form-select-sm" style="width: auto;" id="main-camera-select">
+                        {% for camera in cameras %}
+                        <option value="{{ camera.id }}">{{ camera.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="card-body">
+                    <div class="text-center">
+                        <img src="https://via.placeholder.com/640x360" class="img-fluid rounded" id="main-camera-feed">
+                        <div class="mt-3">
+                            <button class="btn btn-primary" id="start-recognition">Запустить распознавание</button>
+                            <button class="btn btn-outline-secondary" id="stop-recognition">Остановить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5>Журнал посещений</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ФИО</th>
+                                    <th>Время</th>
+                                    <th>Класс</th>
+                                    <th>Камера</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for visit in recent_visits %}
+                                <tr>
+                                    <td>{{ visit.visitor.user.get_full_name }}</td>
+                                    <td>{{ visit.timestamp|time }}</td>
+                                    <td>{{ visit.visitor.grade }}</td>
+                                    <td>{{ visit.camera.name|default:"-" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-3">
+                        <button class="btn btn-success">Экспорт в Excel</button>
+                        <button class="btn btn-outline-primary float-end">Показать все</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Правая панель - подключенные камеры -->
+<div class="col-md-3">
+    <div class="card">
+        <div class="card-header">
+            <h5>Подключенные камеры</h5>
+        </div>
+        <div class="card-body p-0">
+            <ul class="nav nav-tabs" id="cameraTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="added-tab" data-bs-toggle="tab" data-bs-target="#added-cameras" type="button">Добавленные</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="discover-tab" data-bs-toggle="tab" data-bs-target="#discover-cameras" type="button">Добавить новую</button>
+                </li>
+            </ul>
+            <div class="tab-content p-3" id="cameraTabsContent">
+                <!-- Вкладка с добавленными камерами -->
+                <div class="tab-pane fade show active" id="added-cameras" role="tabpanel">
+                    {% if cameras %}
+                    <ul class="list-group list-group-flush">
+                        {% for camera in cameras %}
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>{{ camera.name }}</span>
+                                <span class="badge {% if camera.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                                    {% if camera.is_active %}Активна{% else %}Неактивна{% endif %}
+                                </span>
+                            </div>
+                            <small class="text-muted d-block">
+                                {% if camera.device_id %}
+                                USB-камера (ID: {{ camera.device_id }})
+                                {% else %}
+                                IP: {{ camera.ip_address }}{% if camera.port %}:{{ camera.port }}{% endif %}
+                                {% endif %}
+                            </small>
+                            {% if camera.location %}
+                            <small class="text-muted d-block">Место: {{ camera.location.name }}</small>
+                            {% endif %}
+                            
+                            <div class="camera-preview mt-2">
+                                <img src="https://via.placeholder.com/200x150?text={{ camera.name }}" 
+                                     class="img-thumbnail w-100" 
+                                     data-camera-id="{{ camera.id }}">
+                            </div>
+                            
+                            <div class="mt-2 d-flex justify-content-between">
+                                <button class="btn btn-sm btn-outline-primary camera-settings" 
+                                        data-camera-id="{{ camera.id }}">
+                                    <i class="bi bi-gear"></i> Настройки
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger camera-delete" 
+                                        data-camera-id="{{ camera.id }}">
+                                    <i class="bi bi-trash"></i> Удалить
+                                </button>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="alert alert-info">Нет добавленных камер</div>
+                    {% endif %}
+                </div>
+                
+                <!-- Вкладка для добавления новых камер -->
+                <div class="tab-pane fade" id="discover-cameras" role="tabpanel">
+                    <div class="list-group">
+                        <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                                data-bs-toggle="modal" data-bs-target="#addNetworkCameraModal">
+                            <span>Добавить сетевую камеру</span>
+                            <i class="bi bi-router"></i>
+                        </button>
+                        
+                        <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                                id="refresh-usb-cameras">
+                            <span>Обновить список USB камер</span>
+                            <i class="bi bi-usb-symbol"></i>
+                        </button>
+                    </div>
+                    
+                    <div id="usb-cameras-list" class="mt-3">
+                        {% if usb_cameras %}
+                            <div class="alert alert-success">
+                                Найдено {{ usb_cameras|length }} USB камер
+                            </div>
+                            <ul class="list-group list-group-flush">
+                                {% for camera in usb_cameras %}
+                                <li class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span>USB камера #{{ camera.index }}</span>
+                                        <span class="badge bg-info">Доступна</span>
+                                    </div>
+                                    <small class="text-muted">Разрешение: {{ camera.resolution }}</small>
+                                    
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-primary w-100 connect-usb-camera" 
+                                                data-camera-index="{{ camera.index }}">
+                                            <i class="bi bi-plus-circle"></i> Добавить в систему
+                                        </button>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <div class="alert alert-warning mt-3">
+                                USB камеры не обнаружены. Подключите камеру и нажмите "Обновить список"
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
-<div class="card mt-3">
-    <div class="card-header">
-        Журнал посещений
-    </div>
-    <div class="card-body">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>ФИО</th>
-                    <th>Время</th>
-                    <th>Класс</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Иванов А.</td>
-                    <td>12:30</td>
-                    <td>9А</td>
-                </tr>
-            </tbody>
-        </table>
-        <button class="btn btn-success">Экспорт в Excel</button>
+<!-- Модальное окно для добавления сетевой камеры -->
+<div class="modal fade" id="addNetworkCameraModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить сетевую камеру</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="networkCameraForm">
+                    <div class="mb-3">
+                        <label for="networkCameraName" class="form-label">Название камеры*</label>
+                        <input type="text" class="form-control" id="networkCameraName" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="networkCameraIp" class="form-label">IP-адрес*</label>
+                            <input type="text" class="form-control" id="networkCameraIp" placeholder="192.168.1.100" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="networkCameraPort" class="form-label">Порт</label>
+                            <input type="number" class="form-control" id="networkCameraPort" value="80">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="networkCameraLocation" class="form-label">Местоположение</label>
+                        <select class="form-select" id="networkCameraLocation">
+                            <option value="">-- Выберите местоположение --</option>
+                            {% for location in locations %}
+                            <option value="{{ location.id }}">{{ location.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Можно добавить новое местоположение в <a href="#" data-bs-toggle="modal" data-bs-target="#addLocationModal">настройках системы</a></small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="saveNetworkCamera">Сохранить</button>
+            </div>
+        </div>
     </div>
 </div>
+
+<!-- Модальное окно для добавления USB камеры -->
+<div class="modal fade" id="addUsbCameraModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить USB камеру</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="usbCameraForm">
+                    <input type="hidden" id="usbCameraIndex">
+                    <div class="mb-3">
+                        <label for="usbCameraName" class="form-label">Название камеры*</label>
+                        <input type="text" class="form-control" id="usbCameraName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="usbCameraLocation" class="form-label">Местоположение</label>
+                        <select class="form-select" id="usbCameraLocation">
+                            <option value="">-- Выберите местоположение --</option>
+                            {% for location in locations %}
+                            <option value="{{ location.id }}">{{ location.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="alert alert-info">
+                        Камера будет доступна после сохранения. Вы сможете изменить её настройки позже.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="saveUsbCamera">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для добавления местоположения -->
+<div class="modal fade" id="addLocationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить местоположение</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="locationForm">
+                    <div class="mb-3">
+                        <label for="locationName" class="form-label">Название</label>
+                        <input type="text" class="form-control" id="locationName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="locationDescription" class="form-label">Описание</label>
+                        <textarea class="form-control" id="locationDescription" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="saveLocation">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно настроек камеры -->
+<div class="modal fade" id="cameraSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Настройки камеры</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="cameraSettingsContent">
+                <!-- Настройки будут загружаться динамически -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" id="saveCameraSettings">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализация выбора основной камеры
+    const mainCameraSelect = document.getElementById('main-camera-select');
+    const mainCameraFeed = document.getElementById('main-camera-feed');
+    
+    // Обновляем изображение с камеры при изменении выбора
+    mainCameraSelect.addEventListener('change', function() {
+        updateCameraFeed(this.value);
+    });
+
+    // Функция обновления изображения с камеры
+    function updateCameraFeed(cameraId) {
+        if (!cameraId) return;
+        
+        // Для добавленных камер
+        if (!isNaN(cameraId)) {
+            mainCameraFeed.src = `/camera_feed/${cameraId}/`;
+        } 
+        // Для USB камер
+        else if (cameraId.startsWith('usb_')) {
+            const index = cameraId.split('_')[1];
+            mainCameraFeed.src = `/usb_camera_feed/${index}/`;
+        }
+    }
+
+    // Обработка кнопок распознавания
+    document.getElementById('start-recognition').addEventListener('click', function() {
+        const cameraId = mainCameraSelect.value;
+        if (!cameraId) {
+            showAlert('Выберите камеру для распознавания', 'warning');
+            return;
+        }
+        startFaceRecognition(cameraId);
+    });
+    
+    document.getElementById('stop-recognition').addEventListener('click', stopFaceRecognition);
+
+    // Функция запуска распознавания лиц
+    function startFaceRecognition(cameraId) {
+        fetch('/start_recognition/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({
+                camera_id: cameraId
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Ошибка сервера');
+            return response.json();
+        })
+        .then(data => {
+            if(data.status === 'success') {
+                showAlert('Распознавание лиц запущено!', 'success');
+                document.getElementById('start-recognition').disabled = true;
+                document.getElementById('stop-recognition').disabled = false;
+            }
+        })
+        .catch(error => {
+            showAlert('Ошибка при запуске распознавания: ' + error.message, 'danger');
+        });
+    }
+
+    // Функция остановки распознавания лиц
+    function stopFaceRecognition() {
+        fetch('/stop_recognition/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Ошибка сервера');
+            return response.json();
+        })
+        .then(data => {
+            if(data.status === 'success') {
+                showAlert('Распознавание лиц остановлено!', 'info');
+                document.getElementById('start-recognition').disabled = false;
+                document.getElementById('stop-recognition').disabled = true;
+            }
+        })
+        .catch(error => {
+            showAlert('Ошибка при остановке распознавания: ' + error.message, 'danger');
+        });
+    }
+
+    // Обновление списка USB камер
+    document.getElementById('refresh-usb-cameras').addEventListener('click', function() {
+        fetch('/facepass/')
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newContent = doc.getElementById('usb-cameras-list').innerHTML;
+                document.getElementById('usb-cameras-list').innerHTML = newContent;
+                showAlert('Список USB камер обновлен', 'success');
+            })
+            .catch(error => {
+                showAlert('Ошибка при обновлении списка камер: ' + error.message, 'danger');
+            });
+    });
+
+    // Обработка кликов по миниатюрам камер
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.camera-preview img')) {
+            const img = e.target.closest('.camera-preview img');
+            const cameraId = img.getAttribute('data-camera-id');
+            
+            if (cameraId.startsWith('usb_')) {
+                mainCameraSelect.value = 'usb_' + cameraId.split('_')[1];
+                updateCameraFeed(cameraId);
+            } else {
+                mainCameraSelect.value = cameraId;
+                updateCameraFeed(cameraId);
+            }
+        }
+    });
+
+    // Подключение USB камеры
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.connect-usb-camera')) {
+            const btn = e.target.closest('.connect-usb-camera');
+            const cameraIndex = btn.getAttribute('data-camera-index');
+            
+            document.getElementById('usbCameraIndex').value = cameraIndex;
+            document.getElementById('usbCameraName').value = `USB Камера ${cameraIndex}`;
+            
+            const modal = new bootstrap.Modal(document.getElementById('addUsbCameraModal'));
+            modal.show();
+        }
+    });
+
+    // Сохранение USB камеры
+    document.getElementById('saveUsbCamera').addEventListener('click', function() {
+        const name = document.getElementById('usbCameraName').value;
+        const index = document.getElementById('usbCameraIndex').value;
+        const locationId = document.getElementById('usbCameraLocation').value;
+
+        if (!name) {
+            showAlert('Введите название камеры', 'warning');
+            return;
+        }
+        
+        fetch('/cameras/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({
+                name: name,
+                device_id: index,
+                location: locationId,
+                is_active: true,
+                type: 'usb'
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.detail || 'Ошибка сохранения'); });
+            }
+            return response.json();
+        })
+        .then(data => {
+            showAlert('USB камера успешно добавлена!', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('addUsbCameraModal')).hide();
+            window.location.reload();
+        })
+        .catch(error => {
+            showAlert('Ошибка при добавлении камеры: ' + error.message, 'danger');
+        });
+    });
+
+    // Обработчик для кнопок "Добавить в систему"
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.connect-usb-camera')) {
+            const btn = e.target.closest('.connect-usb-camera');
+            const cameraIndex = btn.getAttribute('data-camera-index');
+            
+            // Установим значения в модальное окно
+            document.getElementById('usbCameraIndex').value = cameraIndex;
+            document.getElementById('usbCameraName').value = `USB Камера ${cameraIndex}`;
+            
+            // Сбросим выбранное местоположение
+            document.getElementById('usbCameraLocation').value = '';
+            
+            // Покажем модальное окно
+            const modal = new bootstrap.Modal(document.getElementById('addUsbCameraModal'));
+            modal.show();
+        }
+    });
+
+
+    // Поиск учеников
+    document.getElementById('student-search').addEventListener('input', function() {
+        const searchText = this.value.toLowerCase();
+        document.querySelectorAll('.visitor-row').forEach(row => {
+            const name = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
+            row.style.display = name.includes(searchText) ? '' : 'none';
+        });
+    });
+
+    // Сохранение нового местоположения
+    document.getElementById('saveLocation').addEventListener('click', function() {
+        const name = document.getElementById('locationName').value;
+        const description = document.getElementById('locationDescription').value;
+        
+        if (!name) {
+            showAlert('Введите название местоположения', 'warning');
+            return;
+        }
+        
+        fetch('/api/locations/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({
+                name: name,
+                description: description
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.id) {
+                // Добавляем новое местоположение во все select'ы
+                document.querySelectorAll('select[id$="Location"]').forEach(select => {
+                    const option = document.createElement('option');
+                    option.value = data.id;
+                    option.textContent = data.name;
+                    select.appendChild(option);
+                    option.selected = true;
+                });
+                
+                showAlert('Местоположение успешно добавлено', 'success');
+                // Закрываем модальное окно
+                bootstrap.Modal.getInstance(document.getElementById('addLocationModal')).hide();
+            }
+        })
+        .catch(error => {
+            showAlert('Ошибка при сохранении местоположения: ' + error.message, 'danger');
+        });
+    });
+
+    // Удаление камеры
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.camera-delete')) {
+            const btn = e.target.closest('.camera-delete');
+            const cameraId = btn.getAttribute('data-camera-id');
+            
+            if (confirm('Вы уверены, что хотите удалить эту камеру?')) {
+                fetch(`/api/cameras/${cameraId}/`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        showAlert('Камера успешно удалена', 'success');
+                        window.location.reload();
+                    }
+                })
+                .catch(error => {
+                    showAlert('Ошибка при удалении камеры: ' + error.message, 'danger');
+                });
+            }
+        }
+    });
+
+    // Инициализация статуса кнопок распознавания
+    document.getElementById('stop-recognition').disabled = true;
+});
+
+// Функция для получения CSRF токена
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.role = 'alert';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    const container = document.querySelector('.container-fluid');
+    container.prepend(alertDiv);
+    
+    setTimeout(() => {
+        alertDiv.classList.remove('show');
+        setTimeout(() => alertDiv.remove(), 150);
+    }, 5000);
+}
+</script>
 {% endblock %}
