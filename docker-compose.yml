@@ -13,7 +13,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - shop_network
+      - school_network
 
   adminer:
     image: adminer:latest
@@ -21,7 +21,7 @@ services:
     ports:
       - "8080:8080"
     networks:
-      - shop_network
+      - school_network
     depends_on:
       - postgres
 
@@ -29,5 +29,5 @@ volumes:
   postgres_data:
 
 networks:
-  shop_network:
+  school_network:
     driver: bridge

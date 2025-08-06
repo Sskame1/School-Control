@@ -1,71 +1,100 @@
-from django.shortcuts import render
-from .models import Camera, VisitLog, Visitor, Location
-from .serializers import LocationSerializer, CameraSerializer
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+# views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 import cv2
+from django.shortcuts import render
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from .models import Camera
+from .serializers import CameraSerializer
+from django.http import StreamingHttpResponse, HttpResponse
+import threading
 
-class LocationListCreate(ListCreateAPIView):
-    queryset = Location.objects.all()
-    serializer_class = LocationSerializer
+camera_threads = {}
 
-class CameraListCreate(ListCreateAPIView):
-    queryset = Camera.objects.all()
-    serializer_class = CameraSerializer
+class VideoCamera(object):
+    def __init__(self, camera_index):
+        self.video = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+        (self.grabbed, self.frame) = self.video.read()
+        threading.Thread(target=self.update, args=()).start()
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    def __del__(self):
+        self.video.release()
 
-class CameraDetail(RetrieveUpdateDestroyAPIView):
-    queryset = Camera.objects.all()
-    serializer_class = CameraSerializer
+    def get_frame(self):
+        image = self.frame
+        _, jpeg = cv2.imencode('.jpg', image)
+        return jpeg.tobytes()
 
-class StartRecognitionView(APIView):
-    def post(self, request):
-        camera_id = request.data.get('camera_id')
-        # Здесь будет логика запуска распознавания
-        return Response({'status': 'success'}, status=status.HTTP_200_OK)
+    def update(self):
+        while True:
+            (self.grabbed, self.frame) = self.video.read()
 
-class StopRecognitionView(APIView):
-    def post(self, request):
-        # Здесь будет логика остановки распознавания
-        return Response({'status': 'success'}, status=status.HTTP_200_OK)
+def gen(camera):
+    while True:
+        frame = camera.get_frame()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
 
-def get_usb_cameras():
-    usb_cameras = []
-    for i in range(3):  # Проверяем только первые 3 индекса
+class USBCamerasAPIView(APIView):
+    def get(self, request):
+        """API для получения списка доступных USB камер"""
+        def get_connected_usb_cameras():
+            cameras = []
+            for i in range(10):
+                try:
+                    cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+                    if cap.isOpened():
+                        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        cameras.append({
+                            'index': i,
+                            'name': f'USB Camera {i}',
+                            'resolution': f"{width}x{height}"
+                        })
+                        cap.release()
+                except Exception as e:
+                    continue
+            return cameras
+
         try:
-            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-            if cap.isOpened():
-                usb_cameras.append({
-                    'index': i,
-                    'name': f'USB Camera {i}',
-                    'resolution': f'{int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}'
-                })
-                cap.release()
+            cameras = get_connected_usb_cameras()
+            return Response({
+                'success': True,
+                'cameras': cameras,
+                'message': f"Найдено {len(cameras)} USB камер"
+            }, status=status.HTTP_200_OK)
         except Exception as e:
-            print(f"Error checking camera index {i}: {str(e)}")
-            continue
-    return usb_cameras
+            return Response({
+                'success': False,
+                'message': f"Ошибка при поиске камер: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class CameraAPIView(ListCreateAPIView):
+    queryset = Camera.objects.all()
+    serializer_class = CameraSerializer
+
+class CameraDetailAPIView(RetrieveUpdateDestroyAPIView):
+    queryset = Camera.objects.all()
+    serializer_class = CameraSerializer
+
+def camera_stream(request, camera_id):
+    try:
+        camera = Camera.objects.get(pk=camera_id)
+        if camera.camera_type == 'usb':
+            camera_index = int(camera.source)
+        else:
+            # Для сетевых камер
+            camera_index = camera.source
+            
+        if camera_id not in camera_threads:
+            camera_threads[camera_id] = VideoCamera(camera_index)
+            
+        return StreamingHttpResponse(gen(camera_threads[camera_id]),
+                            content_type='multipart/x-mixed-replace; boundary=frame')
+    except Exception as e:
+        print(f"Error in camera_stream: {str(e)}")
+        return HttpResponse(status=500)
 
 def facepass_view(request):
-    try:
-        usb_cameras = get_usb_cameras()
-    except Exception as e:
-        print(f"Error getting USB cameras: {e}")
-        usb_cameras = []
-    
-    context = {
-        'cameras': Camera.objects.filter(is_active=True),
-        'recent_visits': VisitLog.objects.all().order_by('-timestamp')[:10],
-        'all_visitors': Visitor.objects.all(),
-        'locations': Location.objects.all(),
-        'usb_cameras': usb_cameras,
-    }
-    return render(request, 'facepass/index.html', context)
+    return render(request, 'facepass/index.html')
