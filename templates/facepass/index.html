@@ -63,6 +63,7 @@
                             <img src="http://localhost:8000/static/image/size.png" class="img-fluid rounded" id="main-camera-feed">
                         </div>
                         <div class="mt-3">
+                            <button class="btn btn-primary" id="start-training">Обучить модель</button>
                             <button class="btn btn-primary" id="start-recognition">Запустить распознавание</button>
                             <button class="btn btn-outline-secondary" id="stop-recognition" disabled>Остановить</button>
                         </div>
@@ -213,7 +214,31 @@
     </div>
 </div>
 
+<!-- Модальное окно для обучения -->
+<div class="modal fade" id="trainingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Обучение модели</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="training-progress">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div class="text-center mt-2" id="training-status">Подготовка к обучению...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    document.getElementById('start-training').addEventListener('click', startTraining);
+    document.getElementById('start-recognition').addEventListener('click', startRecognition);
+    document.getElementById('stop-recognition').addEventListener('click', stopRecognition);
 // Функция для получения CSRF токена
 function getCookie(name) {
     let cookieValue = null;
@@ -228,6 +253,74 @@ function getCookie(name) {
         }
     }
     return cookieValue;
+}
+
+function startTraining() {
+    const modal = new bootstrap.Modal(document.getElementById('trainingModal'));
+    modal.show();
+    
+    const progressBar = document.querySelector('#training-progress .progress-bar');
+    const statusText = document.getElementById('training-status');
+    
+    fetch('/aimodule/api/train/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            progressBar.style.width = '100%';
+            progressBar.classList.remove('progress-bar-animated');
+            statusText.innerHTML = `Обучение завершено! Классы: ${data.classes.join(', ')}`;
+        } else {
+            throw new Error(data.message || 'Ошибка обучения');
+        }
+    })
+    .catch(error => {
+        progressBar.classList.add('bg-danger');
+        statusText.innerHTML = `Ошибка: ${error.message}`;
+    });
+}
+
+function startRecognition() {
+    fetch('/aimodule/api/toggle-detection/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({action: 'start'})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'started') {
+            document.getElementById('start-recognition').disabled = true;
+            document.getElementById('stop-recognition').disabled = false;
+            showToast('Успех', 'Распознавание запущено', 'success');
+        }
+    });
+}
+
+function stopRecognition() {
+    fetch('/aimodule/api/toggle-detection/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({action: 'stop'})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'stopped') {
+            document.getElementById('start-recognition').disabled = false;
+            document.getElementById('stop-recognition').disabled = true;
+            showToast('Успех', 'Распознавание остановлено', 'success');
+        }
+    });
 }
 
 

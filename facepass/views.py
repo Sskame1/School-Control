@@ -9,6 +9,7 @@ from .models import Camera
 from .serializers import CameraSerializer
 from django.http import StreamingHttpResponse, HttpResponse
 import threading
+from aimodule.views import get_detection_result
 
 camera_threads = {}
 

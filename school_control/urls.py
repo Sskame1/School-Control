@@ -7,5 +7,6 @@ urlpatterns = [
     path('', home_view, name='home'),
     path('bells/', include('bells.urls', namespace='bells')),
     path('facepass/', include('facepass.urls', namespace='facepass')),
+    path('aimodule/', include('aimodule.urls', namespace='aimodule'))
     
 ]
